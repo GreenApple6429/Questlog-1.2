@@ -11,8 +11,14 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check that index.html exists
+        run: test -f index.html || (echo "index.html ontbreekt in de hoofdmap van de repo" && exit 1)
 
       - uses: actions/setup-node@v4
         with:
@@ -23,8 +29,12 @@ jobs:
           distribution: temurin
           java-version: 21
 
-            - name: Accept Android licenses
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Accept Android licenses (SDK is already on the runner)
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - name: Create the Android project
         run: |
@@ -89,7 +99,6 @@ jobs:
           os.makedirs(res + "raw", exist_ok=True)
           badge(96, 0.38, (255, 255, 255, 255), 0.07, 0.09).save(res + "drawable/ic_stat_questlog.png")
 
-          # alarm sound: three beeps, a pause, repeated a few times (about 7 seconds)
           rate = 22050
           frames = []
           def beep(freq, dur):
