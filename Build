@@ -1,0 +1,149 @@
+name: Build Questlog APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Create the Android project
+        run: |
+          mkdir -p build/www
+          cp index.html build/www/index.html
+          cd build
+          npm init -y
+          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/local-notifications@7 @capacitor/assets@3
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "app.questlog.habits",
+            "appName": "Questlog",
+            "webDir": "www",
+            "android": { "backgroundColor": "#1b1740" },
+            "plugins": {
+              "LocalNotifications": { "smallIcon": "ic_stat_questlog", "iconColor": "#ffc83d" }
+            }
+          }
+          EOF
+          npx cap add android
+
+      - name: Make icons, splash and the alarm sound
+        run: |
+          pip install pillow
+          cd build
+          mkdir -p assets
+          python3 - <<'PY'
+          from PIL import Image, ImageDraw
+          import wave, struct, math, os
+
+          BG = (27, 23, 64, 255)
+          YEL = (255, 200, 61, 255)
+
+          def badge(size, ring, check, ringw, checkw):
+              S = 4
+              im = Image.new("RGBA", (size * S, size * S), (0, 0, 0, 0))
+              d = ImageDraw.Draw(im)
+              c = size * S / 2
+              r = size * S * ring
+              d.ellipse([c - r, c - r, c + r, c + r], outline=check, width=int(size * S * ringw))
+              pts = [(c - r * 0.42, c + r * 0.02), (c - r * 0.1, c + r * 0.36), (c + r * 0.46, c - r * 0.32)]
+              w = int(size * S * checkw)
+              d.line(pts, fill=check, width=w, joint="curve")
+              for p in (pts[0], pts[-1]):
+                  d.ellipse([p[0] - w / 2, p[1] - w / 2, p[0] + w / 2, p[1] + w / 2], fill=check)
+              return im.resize((size, size), Image.LANCZOS)
+
+          fg = badge(1024, 0.26, YEL, 0.055, 0.07)
+          fg.save("assets/icon-foreground.png")
+          Image.new("RGBA", (1024, 1024), BG).save("assets/icon-background.png")
+          only = Image.new("RGBA", (1024, 1024), BG)
+          only.alpha_composite(fg)
+          only.save("assets/icon-only.png")
+          for name in ("splash.png", "splash-dark.png"):
+              sp = Image.new("RGBA", (2732, 2732), BG)
+              big = badge(900, 0.30, YEL, 0.06, 0.075)
+              sp.alpha_composite(big, ((2732 - 900) // 2, (2732 - 900) // 2))
+              sp.save("assets/" + name)
+
+          res = "android/app/src/main/res/"
+          os.makedirs(res + "drawable", exist_ok=True)
+          os.makedirs(res + "raw", exist_ok=True)
+          badge(96, 0.38, (255, 255, 255, 255), 0.07, 0.09).save(res + "drawable/ic_stat_questlog.png")
+
+          # alarm sound: three beeps, a pause, repeated a few times (about 7 seconds)
+          rate = 22050
+          frames = []
+          def beep(freq, dur):
+              n = int(rate * dur)
+              for i in range(n):
+                  env = min(1, i / 300, (n - i) / 300)
+                  frames.append(int(14000 * env * math.sin(2 * math.pi * freq * i / rate)))
+          def gap(dur):
+              frames.extend([0] * int(rate * dur))
+          for _ in range(4):
+              for f in (880, 880, 1175):
+                  beep(f, 0.16)
+                  gap(0.10)
+              gap(0.55)
+          w = wave.open(res + "raw/alarm.wav", "w")
+          w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+          w.writeframes(b"".join(struct.pack("<h", v) for v in frames))
+          w.close()
+          PY
+          npx capacitor-assets generate --android --iconBackgroundColor '#1b1740' --iconBackgroundColorDark '#1b1740' --splashBackgroundColor '#1b1740' --splashBackgroundColorDark '#1b1740'
+
+      - name: Allow alarms and notifications
+        run: |
+          cd build
+          python3 - <<'PY'
+          p = "android/app/src/main/AndroidManifest.xml"
+          s = open(p).read()
+          perms = ""
+          for n in ("POST_NOTIFICATIONS", "USE_EXACT_ALARM", "SCHEDULE_EXACT_ALARM", "RECEIVE_BOOT_COMPLETED", "VIBRATE", "WAKE_LOCK"):
+              line = '<uses-permission android:name="android.permission.%s" />' % n
+              if line not in s:
+                  perms += "    " + line + "\n"
+          s = s.replace("<application", perms + "    <application", 1)
+          open(p, "w").write(s)
+          PY
+          npx cap sync android
+
+      - name: Build the APK
+        run: |
+          cd build/android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+          cp app/build/outputs/apk/debug/app-debug.apk ../Questlog.apk
+
+      - name: Keep a copy in this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: Questlog-apk
+          path: build/Questlog.apk
+
+      - name: Publish a download link
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Questlog (newest build)
+          body: Download Questlog.apk below, open it on your phone and install it.
+          files: build/Questlog.apk
+          make_latest: true
