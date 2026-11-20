@@ -120,6 +120,15 @@ jobs:
           PY
           npx capacitor-assets generate --android --iconBackgroundColor '#1b1740' --iconBackgroundColorDark '#1b1740' --splashBackgroundColor '#1b1740' --splashBackgroundColorDark '#1b1740'
 
+      - name: Alarm ringtone (your file if present, always made louder)
+        run: |
+          command -v ffmpeg >/dev/null || sudo apt-get install -y ffmpeg
+          raw=build/android/app/src/main/res/raw
+          src=$(ls alarm.mp3 alarm.m4a alarm.ogg alarm.aac alarm.wav 2>/dev/null | head -n 1 || true)
+          if [ -z "$src" ]; then src="$raw/alarm.wav"; fi
+          cp "$src" /tmp/alarm_src
+          ffmpeg -y -i /tmp/alarm_src -t 30 -af "loudnorm=I=-8:TP=-1:LRA=7" -ar 44100 -ac 2 "$raw/alarm.wav"
+
       - name: Allow alarms and notifications
         run: |
           cd build
