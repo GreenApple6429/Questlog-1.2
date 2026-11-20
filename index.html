@@ -338,6 +338,7 @@ select{width:100%;min-height:48px;border-radius:var(--rb);border:var(--bw) solid
 :root[data-qf="bubbly"]{--font-display:'Fredoka',system-ui,sans-serif;--font-body:'Fredoka',system-ui,sans-serif}
 :root[data-qf="serif"]{--font-display:'Fraunces',Georgia,serif}
 :root[data-qf="scifi"]{--font-display:'Orbitron',system-ui,sans-serif}
+li[data-qid]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .tw2{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px -6px 0;padding:0 6px 6px}
 table.wk2{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}
 .wk2 th,.wk2 td{padding:6px 5px;text-align:center;white-space:nowrap;font-weight:600}
@@ -864,6 +865,7 @@ async function loadSounds(){
   if(!(await sstore.open()))return;
   for(const k in SLOTS){const b=await sstore.get(k);if(b)customBlobs[k]=b}
   const bg=await sstore.get('bg');if(bg){bgUrl=URL.createObjectURL(bg);applyBg()}
+  scheduleSoon();
 }
 
 /* ================= popups (level up, streak, tokens) ================= */
@@ -1054,7 +1056,7 @@ function todayHTML0(){
   if(!S.tasks.length)return h+'<div class="card empty"><h3>No quests yet</h3><p>Add your first quest. Brush your teeth, feed the goldfish, anything that keeps slipping.</p><button class="btn primary" data-act="add">Add a quest</button></div>';
   if(!due.length)return h+'<div class="card empty"><h3>Nothing scheduled</h3><p>No quest is due on this day.</p><button class="btn" data-act="add">Add a quest</button></div>';
   if(!isToday)h+='<p class="hint" style="padding:0 4px">View only. You can complete quests on the day itself.</p>';
-  else if(!Object.keys(logs).length)h+='<div class="card notice"><p><b>Tap a quest to complete it.</b> Quests with a number, like 0/2, count up each time you tap.</p></div>';
+  else if(!Object.keys(logs).length)h+='<div class="card notice"><p><b>Tap a quest to complete it, hold it to edit.</b> Quests with a number, like 0/2, count up each time you tap.</p></div>';
   const nowM=minuteNow();
   const row=(t,idx)=>{
     const n=cnt(t,k),full=n>=t.reps,tm=sortedTimes(t),slot=tm[n];
@@ -1064,7 +1066,7 @@ function todayHTML0(){
     const face=t.reps===1?ic(miss?'cross':'check',30):(full?ic('check',30):(miss?ic('cross',26):n+'/'+t.reps));
     const label=t.reps===1?(full?t.name+', done. Tap to undo.':t.name+', tap to complete'):(t.name+', '+n+' of '+t.reps+' done'+(full?'':', tap to add one'));
     const attrs=isToday?' data-act="tick" data-id="'+t.id+'" role="button" tabindex="0" aria-label="'+esc(label)+'"':'';
-    return '<li class="card task'+(full?' done':'')+(late?' late':'')+(isToday?'':' ro')+'"'+attrs+'>'
+    return '<li class="card task'+(full?' done':'')+(late?' late':'')+(isToday?'':' ro')+'" data-qid="'+t.id+'"'+attrs+'>'
       +'<span class="chk'+(full?' full':miss?' miss':n>0?' part':'')+(ui.pop===t.id?' pop':'')+'">'+face+'</span>'
       +'<div class="t-body"><div class="t-name">'+esc(t.name)+'</div><div class="t-meta">'
       +(tm.length?'<span class="tnum">'+(t.alarm?ic('bell',13):ic('clock',13))+tm.join(' · ')+'</span>':'')
@@ -1073,7 +1075,7 @@ function todayHTML0(){
       +(late?'<span class="pill late">Overdue</span>':'')+(isNext&&!late?'<span class="pill next">Up next</span>':'')
       +'</div></div>'
       +'<div class="t-side">'+(isToday&&t.reps>1&&n>0?'<button class="icon-btn" data-act="undo" data-id="'+t.id+'" aria-label="Undo one for '+esc(t.name)+'">'+ic('undo',20)+'</button>':'')
-      +'<button class="icon-btn" data-act="edit" data-id="'+t.id+'" aria-label="Edit '+esc(t.name)+'">'+ic('gear',20)+'</button><span class="xpchip tnum">+'+XP[t.diff]+'</span></div></li>';
+      +'<span class="xpchip tnum">+'+XP[t.diff]+'</span></div></li>';
   };
   h+='<ul class="tasks">'+open.map(row).join('')+'</ul>';
   if(done.length)h+='<div class="sect">Cleared</div><ul class="tasks">'+done.map(row).join('')+'</ul>';
@@ -1365,7 +1367,7 @@ function doImport(file){
 async function uploadSound(slot,file){
   if(!file||(file.type&&file.type.indexOf('audio')!==0&&file.type!=='application/ogg'&&file.type!=='video/ogg')){toast('Choose an audio file');return}
   if(file.size>3*1024*1024){toast('That file is too big. Keep it under 3 MB.');return}
-  customBlobs[slot]=file;await sstore.put(slot,file);
+  customBlobs[slot]=file;await sstore.put(slot,file);scheduleSoon();
   drawSettings();playSlot(slot==='alarm'?'check':slot);toast('Sound saved for '+SLOTS[slot]);
 }
 
@@ -1581,6 +1583,7 @@ async function scheduleNative(){
       try{await P.createChannel({id:'questlog-alarm2',name:'Quest alarms',description:'Rings for quests and plans',importance:5,visibility:1,sound:'alarm.wav',vibration:true,lights:true})}catch(e){}
       try{await P.deleteChannel({id:'questlog-alarm'})}catch(e){}
       try{await P.createChannel({id:'questlog-progress',name:'Daily progress',description:'Silent notification with your progress today',importance:2,visibility:1,vibration:false,lights:false})}catch(e){}
+      try{await P.createChannel({id:'questlog-alarm3',name:'Quest alarms (own ringtone)',description:'Silent notification, the app plays your own ringtone',importance:2,visibility:1,vibration:false})}catch(e){}
       nsReady=true;
     }
     const pend=await P.getPending();
@@ -1588,7 +1591,7 @@ async function scheduleNative(){
     const now=new Date(),tk=todayKey(),list=[];
     for(let d=0;d<7;d++){
       const k=addDays(tk,d),base=pk(k);
-      const add=(key,m,title,body)=>{const at=new Date(base.getFullYear(),base.getMonth(),base.getDate(),Math.floor(m/60),m%60,0);if(at>now)list.push({id:nid(key),title:title,body:body,schedule:{at:at,allowWhileIdle:true},channelId:'questlog-alarm2',sound:'alarm.wav'})};
+      const add=(key,m,title,body)=>{const at=new Date(base.getFullYear(),base.getMonth(),base.getDate(),Math.floor(m/60),m%60,0);if(at>now)list.push({id:nid(key),title:title,body:body,schedule:{at:at,allowWhileIdle:true},channelId:customBlobs.alarm?'questlog-alarm3':'questlog-alarm2',sound:'alarm.wav'})};
       for(const t of S.tasks){if(!t.alarm||!isDue(t,k))continue;sortedTimes(t).slice(0,t.reps).forEach((x,i)=>{if(d===0&&cnt(t,k)>i)return;add(k+'|q|'+t.id+'|'+i,toMin(x),t.name,'Quest time · '+x)})}
       for(const e of S.events){if(e.date!==k||!e.remind||(d===0&&evDone(e)))continue;add(k+'|e|'+e.id,e.start,e.title,'Plan · '+fmtMin(e.start)+' – '+fmtMin(e.end))}
     }
@@ -1615,6 +1618,23 @@ function allQuestsHTML(){
   return '<button class="btn" data-act="toggle-all" aria-expanded="'+!!ui.qAll+'" style="margin-top:6px">'+(ui.qAll?'Hide':'Show')+' all quests ('+n+')</button>'+(ui.qAll?questsHTML():'');
 }
 function todayHTML(){return todayHTML0()}
+
+/* ================= long press a quest to edit it ================= */
+(function(){
+  let tm=null,sx=0,sy=0,fired=false;
+  const clr=()=>{clearTimeout(tm);tm=null};
+  document.addEventListener('pointerdown',e=>{
+    fired=false;clr();
+    const li=e.target.closest&&e.target.closest('li[data-qid]');
+    if(!li||e.target.closest('button'))return;
+    sx=e.clientX;sy=e.clientY;
+    tm=setTimeout(()=>{tm=null;fired=true;try{navigator.vibrate&&navigator.vibrate(30)}catch(x){}openEditor(li.dataset.qid)},550);
+  });
+  document.addEventListener('pointermove',e=>{if(tm&&(Math.abs(e.clientX-sx)>10||Math.abs(e.clientY-sy)>10))clr()});
+  ['pointerup','pointercancel'].forEach(t=>document.addEventListener(t,clr));
+  document.addEventListener('click',e=>{if(fired){fired=false;e.stopPropagation();e.preventDefault()}},true);
+  document.addEventListener('contextmenu',e=>{if(e.target.closest&&e.target.closest('li[data-qid]'))e.preventDefault()});
+})();
 
 /* ================= events ================= */
 document.addEventListener('click',e=>{
@@ -1671,7 +1691,7 @@ document.addEventListener('click',e=>{
       const rules=S.settings.tokenRules.filter(r=>r.from!==nw);rules.push({from:nw,days:n});rules.sort((x,y)=>x.from<y.from?-1:1);
       S.settings.tokenRules=rules;mark('main');drawSettings();break}
     case 'snd-preview':{unlockAudio();if(v==='alarm'){stopAlarmSound();startAlarmSound();setTimeout(stopAlarmSound,2500)}else playSlot(v);break}
-    case 'snd-reset':{delete customBlobs[v];sstore.del(v);drawSettings();toast('Default sound restored');break}
+    case 'snd-reset':{delete customBlobs[v];sstore.del(v);scheduleSoon();drawSettings();toast('Default sound restored');break}
     case 'export':doExport();break;
     case 'reset-open':openReset();break;
     case 'reset-cancel':openSettings();clearInterval(resetTimer);break;
