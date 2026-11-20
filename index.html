@@ -899,7 +899,7 @@ function showAlert(){
   root.innerHTML='<div class="alarm" role="alertdialog" aria-label="'+esc(a.kick)+'"><div class="card"><div class="bell">'+ic('bell',56)+'</div>'
     +'<div class="kick">'+esc(a.kick)+'</div><h2>'+esc(a.title)+'</h2><p class="muted">'+esc(a.text||'')+'</p>'
     +'<div class="acts">'+a.acts.map(x=>'<button class="btn'+(x.primary?' primary':'')+'" data-act="'+x.act+'">'+esc(x.label)+'</button>').join('')+'</div></div></div>';
-  if(a.loop)startAlarmSound();else playSlot(a.sound||'timer');
+  if(a.loop){if(!NL())startAlarmSound()}else playSlot(a.sound||'timer');
   try{navigator.vibrate&&navigator.vibrate([250,120,250,120,250])}catch(e){}
 }
 function nextAlert(){alertQ.shift();showAlert()}
@@ -1661,7 +1661,7 @@ document.addEventListener('click',e=>{
     case 'alarm-snooze':{const a0=alertQ[0];if(a0&&a0.data)snoozed.push({id:a0.data.id,time:a0.data.time,slot:a0.data.slot,until:Date.now()+10*60000});nextAlert();toast('Snoozed for 10 minutes');break}
     case 'alert-ok':nextAlert();break;
     case 'timer-next':nextAlert();pomoStart();break;
-    case 'test-alarm':pushAlert({kick:'Test alarm',title:'Test alarm',text:'This is how an alarm looks while Questlog is open.',loop:true,acts:[{label:'Close',act:'alert-ok',primary:1}]});break;
+    case 'test-alarm':if(NL()){NL().schedule({notifications:[{id:999,title:'Test alarm',body:'This is how an alarm rings.',channelId:'questlog-alarm2',sound:'alarm.wav',schedule:{at:new Date(Date.now()+5000),allowWhileIdle:true}}]}).catch(e=>{window.nativeErr=String((e&&e.message)||e)});toast('Test alarm in 5 seconds. Lock your phone to try it.');break}pushAlert({kick:'Test alarm',title:'Test alarm',text:'This is how an alarm looks while Questlog is open.',loop:true,acts:[{label:'Close',act:'alert-ok',primary:1}]});break;
     case 'set-look':{
       const k=el.dataset.k;S.settings[k]=k==='size'?+v:v;mark('main');applyLook();drawSettings();render();break}
     case 'set-sound':S.settings.sound=!S.settings.sound;mark('main');drawSettings();if(S.settings.sound){unlockAudio();playSlot('check')}break;
