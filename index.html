@@ -816,12 +816,13 @@ const customBlobs={};
 function unlockAudio(){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();if(actx.state==='suspended')actx.resume()}catch(e){}}
 addEventListener('pointerdown',unlockAudio,{passive:true});
 addEventListener('keydown',unlockAudio);
+const VM=()=>(S.settings.vol==null?60:S.settings.vol)/60;
 function beep(f,dur,when,vol,type){
   if(!actx)return;
   try{
     const o=actx.createOscillator(),g=actx.createGain(),t=actx.currentTime+(when||0);
     o.type=type||'square';o.frequency.value=f;o.connect(g);g.connect(actx.destination);
-    g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(vol||.12,t+.01);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime((vol||.12)*VM(),t+.01);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
     o.start(t);o.stop(t+dur+.03);
   }catch(e){}
 }
@@ -836,7 +837,7 @@ function playSlot(slot){
   if(!S.settings.sound)return;
   const b=customBlobs[slot];
   if(b){
-    try{const u=URL.createObjectURL(b),a=new Audio(u);a.onended=()=>URL.revokeObjectURL(u);a.play().catch(()=>{});return a}catch(e){}
+    try{const u=URL.createObjectURL(b),a=new Audio(u);a.volume=Math.min(1,VM());a.onended=()=>URL.revokeObjectURL(u);a.play().catch(()=>{});return a}catch(e){}
   }
   (SYNTH[slot]||SYNTH.check)();
 }
@@ -844,7 +845,7 @@ function startAlarmSound(){
   if(!S.settings.sound||alarmTimer||loopAudio)return;
   const b=customBlobs.alarm;
   if(b){
-    try{loopAudio=new Audio(URL.createObjectURL(b));loopAudio.loop=true;loopAudio.play().catch(()=>{});return}catch(e){loopAudio=null}
+    try{loopAudio=new Audio(URL.createObjectURL(b));loopAudio.volume=Math.min(1,VM());loopAudio.loop=true;loopAudio.play().catch(()=>{});return}catch(e){loopAudio=null}
   }
   SYNTH.alarm();alarmTimer=setInterval(SYNTH.alarm,1400);
 }
@@ -1318,6 +1319,7 @@ function drawSettings(){
     +'<div class="fld"><span>Text size</span><div class="seg">'+SIZES.map(f=>'<button data-act="set-look" data-k="size" data-v="'+f[0]+'" aria-pressed="'+(st.size===f[0])+'">'+f[1]+'</button>').join('')+'</div></div>'+bgField();
   const sounds=
     '<div class="switchrow"><div><b>Sound</b><small>Turns all Questlog sounds on or off.</small></div><button class="sw" role="switch" aria-checked="'+st.sound+'" aria-label="Sound" data-act="set-sound"></button></div>'
+    +'<div class="fld"><label class="lab" for="s-vol">Sound volume <span id="s-vol-v" class="tnum">'+(S.settings.vol==null?60:S.settings.vol)+'%</span></label><input type="range" id="s-vol" min="10" max="150" step="5" value="'+(S.settings.vol==null?60:S.settings.vol)+'"><p class="hint">Boosts the built-in sounds while the app is open. Alarms on a locked phone follow your phone notification volume.</p></div>'
     +Object.keys(SLOTS).map(k=>'<div class="slot"><div class="nm"><span>'+SLOTS[k]+'</span><small>'+(customBlobs[k]?esc(customBlobs[k].name||'Custom sound'):'Default')+'</small></div><div class="acts">'
       +'<button class="btn sm" data-act="snd-preview" data-v="'+k+'">'+ic('play',16)+' Preview</button>'
       +'<label class="btn sm filebtn">'+ic('upload',16)+' Upload<input type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.opus,.flac" data-slot="'+k+'" aria-label="Upload a sound for '+SLOTS[k]+'"></label>'
@@ -1326,6 +1328,7 @@ function drawSettings(){
   const alarms=
     '<div class="switchrow"><div><b>Keep screen on</b><small>Stops the screen from sleeping while Questlog is open, so alarms can ring.</small></div><button class="sw" role="switch" aria-checked="'+st.awake+'" aria-label="Keep screen on" data-act="set-awake"></button></div>'
     +(NL()?'<div class="switchrow"><div><b>Progress notification</b><small>A silent notification with today\'s percentage and a motivational quote.</small></div><button class="sw" role="switch" aria-checked="'+(S.settings.progNotif!==false)+'" aria-label="Progress notification" data-act="tog-prog"></button></div>':'')
+    +(window.nativeErr?'<p class="hint">Notification error: '+esc(window.nativeErr)+'</p>':'')
     +'<div class="fld"><p class="hint">This web version can only ring while Questlog is open. Alarms that ring on standby and a pinned progress notification need the Android app.</p><button class="btn sm" data-act="test-alarm" style="justify-self:start">'+ic('bell',16)+' Test alarm</button></div>';
   const nextWeek=addDays(weekStart(tk),7),dNow=tokenDaysFor(weekStart(tk)),dNext=tokenDaysFor(nextWeek);
   const streaks=
@@ -1575,7 +1578,8 @@ async function scheduleNative(){
   try{
     if(!nsReady){
       const pr=await P.requestPermissions();if(pr.display!=='granted')return;
-      try{await P.createChannel({id:'questlog-alarm',name:'Quest alarms',description:'Rings for quests and plans',importance:5,visibility:1,sound:'alarm.wav',vibration:true,lights:true})}catch(e){}
+      try{await P.createChannel({id:'questlog-alarm2',name:'Quest alarms',description:'Rings for quests and plans',importance:5,visibility:1,sound:'alarm.wav',vibration:true,lights:true})}catch(e){}
+      try{await P.deleteChannel({id:'questlog-alarm'})}catch(e){}
       try{await P.createChannel({id:'questlog-progress',name:'Daily progress',description:'Silent notification with your progress today',importance:2,visibility:1,vibration:false,lights:false})}catch(e){}
       nsReady=true;
     }
@@ -1584,26 +1588,26 @@ async function scheduleNative(){
     const now=new Date(),tk=todayKey(),list=[];
     for(let d=0;d<7;d++){
       const k=addDays(tk,d),base=pk(k);
-      const add=(key,m,title,body)=>{const at=new Date(base.getFullYear(),base.getMonth(),base.getDate(),Math.floor(m/60),m%60,0);if(at>now)list.push({id:nid(key),title:title,body:body,schedule:{at:at,allowWhileIdle:true},channelId:'questlog-alarm',sound:'alarm.wav'})};
+      const add=(key,m,title,body)=>{const at=new Date(base.getFullYear(),base.getMonth(),base.getDate(),Math.floor(m/60),m%60,0);if(at>now)list.push({id:nid(key),title:title,body:body,schedule:{at:at,allowWhileIdle:true},channelId:'questlog-alarm2',sound:'alarm.wav'})};
       for(const t of S.tasks){if(!t.alarm||!isDue(t,k))continue;sortedTimes(t).slice(0,t.reps).forEach((x,i)=>{if(d===0&&cnt(t,k)>i)return;add(k+'|q|'+t.id+'|'+i,toMin(x),t.name,'Quest time · '+x)})}
       for(const e of S.events){if(e.date!==k||!e.remind||(d===0&&evDone(e)))continue;add(k+'|e|'+e.id,e.start,e.title,'Plan · '+fmtMin(e.start)+' – '+fmtMin(e.end))}
     }
     const mid=await postProgress(P,tk),all=list.slice(0,60);
     if(mid)all.push(mid);
     if(all.length)await P.schedule({notifications:all});
-  }catch(err){}
+  }catch(err){window.nativeErr=String((err&&err.message)||err)}
 }
 function progItem(k){
-  const st=dayStats(k),dn=Math.abs(Math.round(dayNum(k)));
-  return {id:1,title:st.due?'Today: '+st.done+' of '+st.due+' done · '+Math.round(st.pct||0)+'%':'No quests due today',body:SLOGANS[dn%SLOGANS.length],channelId:'questlog-progress',ongoing:true,autoCancel:false};
+  const st=dayStats(k),dn=Math.abs(Math.round(dayNum(k))),q=SLOGANS[dn%SLOGANS.length];
+  return {id:1,title:st.due?'Today: '+Math.round(st.pct||0)+'% done':'No quests due today',body:st.due?st.done+' of '+st.due+' quest'+(st.due===1?'':'s')+'. '+q:q,channelId:'questlog-progress',ongoing:true,autoCancel:false};
 }
 async function postProgress(P,tk){
   try{await P.removeDeliveredNotifications({notifications:[{id:1}]})}catch(e){}
   if(S.settings.progNotif===false)return null;
-  await P.schedule({notifications:[progItem(tk)]});
-  const t1=addDays(tk,1),b=pk(t1),it=progItem(t1);
-  it.schedule={at:new Date(b.getFullYear(),b.getMonth(),b.getDate(),0,0,10),allowWhileIdle:true};
-  return it;
+  const it=progItem(tk);
+  it.schedule={at:new Date(Date.now()+2000),allowWhileIdle:true};
+  await P.schedule({notifications:[it]});
+  return null;
 }
 function scheduleSoon(){if(!NL())return;clearTimeout(nsT);nsT=setTimeout(scheduleNative,1200)}
 function allQuestsHTML(){
@@ -1721,6 +1725,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('input',e=>{
   const t=e.target;
   if(t.id==='p-name'){S.profile.name=t.value;mark('main');renderHero()}
+  else if(t.id==='s-vol'){S.settings.vol=+t.value;$('#s-vol-v').textContent=t.value+'%';mark('main')}
   else if(t.id==='s-pct'){S.settings.streakPct=+t.value;$('#s-pct-v').textContent=t.value+'%';mark('main')}
   else if(t.id==='s-dim'){S.settings.bgDim=+t.value;$('#s-dim-v').textContent=t.value+'%';mark('main');applyBg()}
   else if(t.id==='r-type')updateResetBtn();
@@ -1728,6 +1733,7 @@ document.addEventListener('input',e=>{
 document.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='s-pct')render();
+  if(t.id==='s-vol')playSlot('check');
   else if(t.id==='s-import'&&t.files&&t.files[0])doImport(t.files[0]);
   else if(t.id==='s-bg'&&t.files&&t.files[0])setBg(t.files[0]);
   else if(t.id==='p-avatar'&&t.files&&t.files[0])setAvatar(t.files[0]);
