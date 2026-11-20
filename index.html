@@ -145,7 +145,7 @@ main{padding-bottom:150px;display:grid;gap:14px}
 
 /* nav */
 nav{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--panel);border-top:var(--bw) solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);padding-left:max(4px,env(safe-area-inset-left,0px));padding-right:max(4px,env(safe-area-inset-right,0px))}
-nav .row{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(6,1fr)}
+nav .row{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr)}
 nav button{display:grid;justify-items:center;gap:2px;padding:9px 0 8px;color:var(--muted);font-size:11px;font-weight:700;position:relative}
 nav button[aria-current=page]{color:var(--acc)}
 :root[data-qt="day"] nav button[aria-current=page]{color:#9a6a00}
@@ -350,7 +350,9 @@ table.wk2{border-collapse:separate;border-spacing:0;width:max-content;min-width:
 .hr{display:grid;grid-template-columns:46px 1fr;gap:8px;min-height:52px}
 .hl{color:var(--muted);font-size:12px;padding-top:8px;text-align:right}
 .hb{display:grid;gap:6px;align-content:start;border-top:1px dashed var(--line);padding:4px 0 6px;cursor:pointer;min-width:0}
-.hp{color:var(--muted);opacity:.5;display:flex;align-items:center;min-height:36px}
+.hp{justify-self:start;width:32px;height:32px;margin:3px 0;border-radius:11px;display:grid;place-items:center;background:var(--acc);color:var(--acc-ink);border:var(--bw) solid var(--acc-hi);box-shadow:0 3px 0 var(--acc-deep)}
+:root[data-qs="soft"] .hp,:root[data-qs="flat"] .hp{box-shadow:var(--sh)}
+.hb:active .hp{transform:translateY(2px)}
 .ev{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--rb);background:var(--panel);border:var(--bw) solid var(--line);border-left:5px solid var(--c);cursor:pointer;min-width:0}
 .evc{width:26px;height:26px;flex:none;border-radius:50%;border:2px solid var(--c);display:grid;place-items:center;color:#fff}
 .evc.on{background:var(--c)}
@@ -469,7 +471,8 @@ function flameSVG(skin,size,lit){
 }
 
 /* ================= game data ================= */
-const XP={easy:5,medium:10,hard:20};
+const XP={easy:5,medium:10,hard:20,extra:30};
+const DLAB={easy:'Easy',medium:'Medium',hard:'Hard',extra:'Extra hard'};
 const BONUS=15;
 const LEVELS=['Couch Potato','Newbie','Unemployed','Snooze Button Hero','Learner','Advancing','Dishwasher','Employee','Fighter','Task Rabbit','Grinder','Early Riser','Workhorse','Reformed Procrastinator','Turbo','Checklist Crusher','Employed','Focus Ninja','Beast','Streak Machine','Manager of Myself','Iron Discipline','Olympic','Unstoppable','Overachiever','Legend','Mythic','Grandmaster','Final Boss','Ascended'];
 const MAXLV=LEVELS.length;
@@ -533,7 +536,7 @@ function fixState(o){
   s.seen=Object.assign({},d.seen,o.seen||{});
   if(!Array.isArray(s.seen.celebrated))s.seen.celebrated=[];
   s.tasks=(Array.isArray(o.tasks)?o.tasks:[]).map(fixTask);
-  s.events=(Array.isArray(o.events)?o.events:[]).filter(e=>e&&e.date&&e.title).map(e=>({id:e.id||newId(),date:e.date,start:+e.start||0,end:+e.end||(+e.start||0)+60,title:String(e.title),cat:ECAT[e.cat]?e.cat:'other',task:e.task||null,remind:e.remind!==false,done:!!e.done}));
+  s.events=(Array.isArray(o.events)?o.events:[]).filter(e=>e&&e.date&&e.title).map(e=>({id:e.id||newId(),date:e.date,start:+e.start||0,end:+e.end||(+e.start||0)+60,title:String(e.title),cat:ECAT[e.cat]?e.cat:'other',task:e.task||null,remind:e.remind!==false,done:!!e.done,auto:!!e.auto,diff:XP[e.diff]?e.diff:'medium'}));
   return s;
 }
 function starterTasks(){
@@ -674,7 +677,7 @@ function mark(id,op){
   op=op||'set';
   dirty.set(id,op);
   if(op==='delete')knownDocs.delete(id);else knownDocs.add(id);
-  persistLocal();
+  persistLocal();scheduleSoon();
   if(storage.db){setSaveState('saving');clearTimeout(flushTimer);flushTimer=setTimeout(flush,500)}
 }
 async function flush(){
@@ -979,7 +982,7 @@ function pomoTick(){
 }
 
 /* ================= views ================= */
-const TABS=[['today','Today','today'],['plan','Plan','clock'],['calendar','Calendar','calendar'],['stats','Stats','chart'],['quests','Quests','list'],['tips','Tips','bulb']];
+const TABS=[['today','Today','today'],['plan','Plan','clock'],['calendar','Calendar','calendar'],['stats','Stats','chart'],['tips','Tips','bulb']];
 function renderHero(){
   const xp=totalXp(),li=levelInfo(xp),st=streakInfo(),tok=tokensAvail(),av=S.profile.avatar;
   const skin=S.profile.flame||'classic';
@@ -1032,7 +1035,7 @@ function cellHTML(c){
   }
 }
 
-function todayHTML(){
+function todayHTML0(){
   const k=ui.view,tk=todayKey(),isToday=k===tk,st=dayStats(k);
   const due=S.tasks.filter(t=>isDue(t,k));
   const first=t=>sortedTimes(t)[0]||'99:99';
@@ -1273,7 +1276,7 @@ function drawEditor(){
     +'<p class="hint" id="coming"></p>'
     +'<div class="fld"><span>Reminder times</span>'+times+'<button class="btn sm" data-act="add-time" style="justify-self:start">'+ic('plus',16)+' Add a time</button>'
     +'<div class="switchrow"><div><b>Ring an alarm</b><small>Rings while Questlog is open on your phone.</small></div><button class="sw" role="switch" aria-checked="'+d.alarm+'" aria-label="Ring an alarm" data-act="toggle-alarm"></button></div></div>'
-    +'<div class="fld"><span>Reward</span><div class="seg fill">'+['easy','medium','hard'].map(x=>'<button data-act="set-diff" data-v="'+x+'" aria-pressed="'+(d.diff===x)+'">'+x[0].toUpperCase()+x.slice(1)+' · '+XP[x]+' XP</button>').join('')+'</div></div>'
+    +'<div class="fld"><span>Reward</span><div class="seg fill">'+['easy','medium','hard','extra'].map(x=>'<button data-act="set-diff" data-v="'+x+'" aria-pressed="'+(d.diff===x)+'">'+DLAB[x]+' · '+XP[x]+' XP</button>').join('')+'</div></div>'
     +'</div><div class="sheet-foot">'+(d.id?'<button class="btn danger" data-act="dismiss-quest">Dismiss</button>':'')+'<button class="btn primary" data-act="save-task">Save quest</button></div></section>';
   document.documentElement.style.overflow='hidden';
   refreshComing();
@@ -1322,6 +1325,7 @@ function drawSettings(){
     +'<p class="hint">Uploaded sounds stay on this device only. Use short audio files under 3 MB, like mp3 or wav. The file picker may open on an empty Recent tab: tap the menu icon (three lines, top left) and open Downloads or Audio to find your file.</p>';
   const alarms=
     '<div class="switchrow"><div><b>Keep screen on</b><small>Stops the screen from sleeping while Questlog is open, so alarms can ring.</small></div><button class="sw" role="switch" aria-checked="'+st.awake+'" aria-label="Keep screen on" data-act="set-awake"></button></div>'
+    +(NL()?'<div class="switchrow"><div><b>Progress notification</b><small>A silent notification with today\'s percentage and a motivational quote.</small></div><button class="sw" role="switch" aria-checked="'+(S.settings.progNotif!==false)+'" aria-label="Progress notification" data-act="tog-prog"></button></div>':'')
     +'<div class="fld"><p class="hint">This web version can only ring while Questlog is open. Alarms that ring on standby and a pinned progress notification need the Android app.</p><button class="btn sm" data-act="test-alarm" style="justify-self:start">'+ic('bell',16)+' Test alarm</button></div>';
   const nextWeek=addDays(weekStart(tk),7),dNow=tokenDaysFor(weekStart(tk)),dNext=tokenDaysFor(nextWeek);
   const streaks=
@@ -1508,7 +1512,7 @@ function planHTML(){
   let rows='';
   for(let hh=lo;hh<=hi;hh++){
     const it=evs.filter(e=>Math.floor(e.start/60)===hh).map(evH).join('')+qi.filter(x=>Math.floor(x.m/60)===hh).map(qH).join('');
-    rows+='<div class="hr"><span class="hl tnum">'+pad(hh)+':00</span><div class="hb" data-act="ev-add" data-v="'+k+'" data-m="'+hh*60+'">'+(it||'<span class="hp">'+ic('plus',14)+'</span>')+'</div></div>';
+    rows+='<div class="hr"><span class="hl tnum">'+pad(hh)+':00</span><div class="hb" data-act="ev-add" data-v="'+k+'" data-m="'+hh*60+'">'+(it||'<span class="hp">'+ic('plus',18)+'</span>')+'</div></div>';
   }
   return h+'<section class="card panel"><div class="timeline">'+rows+'</div></section><p class="hint" style="padding:0 4px">Tap an hour to plan it. Quests with reminder times appear here on their own, and linked plans are checked off when you complete the quest.</p>';
 }
@@ -1516,7 +1520,7 @@ let ed=null;
 function openEvent(id,date,m){
   const e=id&&S.events.find(x=>x.id===id);
   if(e)ed=clone(e);
-  else{const st=m>=0?m:Math.min(23*60,(Math.floor(minuteNow()/60)+1)*60);ed={id:null,date:date,start:st,end:Math.min(1439,st+60),title:'',cat:'work',task:null,remind:true,done:false}}
+  else{const st=m>=0?m:Math.min(23*60,(Math.floor(minuteNow()/60)+1)*60);ed={id:null,date:date,start:st,end:Math.min(1439,st+60),title:'',cat:'work',task:null,remind:true,done:false,diff:'medium'}}
   armed=null;sheet='event';drawEvent();
 }
 function syncE(){
@@ -1531,6 +1535,7 @@ function drawEvent(){
     +'<div class="fld"><label class="lab" for="e-date">Date</label><input type="date" id="e-date" value="'+d.date+'"></div>'
     +'<div class="fld"><span>Start and end time</span><div class="timerow"><input type="time" id="e-start" value="'+fmtMin(d.start)+'" aria-label="Start time"><input type="time" id="e-end" value="'+fmtMin(d.end)+'" aria-label="End time"></div></div>'
     +'<div class="fld"><span>Type</span><div class="seg fill">'+Object.keys(ECAT).map(c=>'<button data-act="ev-cat" data-v="'+c+'" aria-pressed="'+(d.cat===c)+'">'+ECAT[c][0]+'</button>').join('')+'</div></div>'
+    +(d.cat==='work'?'<div class="fld"><span>Reward as a quest</span><div class="seg fill">'+['easy','medium','hard','extra'].map(x=>'<button data-act="ev-diff" data-v="'+x+'" aria-pressed="'+((d.diff||'medium')===x)+'">'+DLAB[x]+'</button>').join('')+'</div><p class="hint">+'+XP[d.diff||'medium']+' XP when completed. Work plans also show on Today as a quest.</p></div>':'')
     +'<div class="fld"><label class="lab" for="e-task">Link to a quest</label><select id="e-task"><option value="">None</option>'+qs.map(t=>'<option value="'+t.id+'"'+(d.task===t.id?' selected':'')+'>'+esc(t.name)+'</option>').join('')+'</select><p class="hint">A linked plan is checked off when you complete that quest on Today.</p></div>'
     +'<div class="switchrow"><div><b>Remind me</b><small>Rings at the start time while Questlog is open.</small></div><button class="sw" role="switch" aria-checked="'+d.remind+'" aria-label="Remind me" data-act="ev-remind"></button></div>'
     +'</div><div class="sheet-foot">'+(d.id?'<button class="btn danger" data-act="ev-del">Delete</button>':'')+'<button class="btn primary" data-act="ev-save">Save plan</button></div></section>';
@@ -1540,16 +1545,72 @@ function saveEvent(){
   syncE();const d=ed,err=$('#e-err');
   if(!d.title.trim()){err.textContent='Give it a name.';err.hidden=false;$('#e-title').focus();return}
   if(d.end<=d.start){err.textContent='The end must be after the start.';err.hidden=false;return}
-  const e={id:d.id||newId(),date:d.date,start:d.start,end:d.end,title:d.title.trim(),cat:d.cat,task:d.task,remind:!!d.remind,done:!!d.done};
+  const old=d.id&&S.events.find(x=>x.id===d.id);
+  if(old&&old.auto&&old.task&&old.task!==d.task){const ot=S.tasks.find(x=>x.id===old.task);if(ot)ot.archived=todayKey();d.auto=false}
+  const e={id:d.id||newId(),date:d.date,start:d.start,end:d.end,title:d.title.trim(),cat:d.cat,task:d.task,remind:!!d.remind,done:!!d.done,auto:!!d.auto,diff:XP[d.diff]?d.diff:'medium'};
+  syncWork(e);
   if(d.id){const i=S.events.findIndex(x=>x.id===d.id);if(i>=0)S.events[i]=e}else S.events.push(e);
   mark('main');closeSheet();ui.pd=e.date;if(ui.tab==='calendar'){ui.calSel=e.date;ui.cal=monthKey(e.date)}
-  render();toast('Plan saved');
+  render();toast(e.auto?'Plan saved. It also shows on Today as a quest.':'Plan saved');
+}
+function syncWork(e){
+  const tk=todayKey(),t=e.auto?S.tasks.find(x=>x.id===e.task):null;
+  if(e.cat==='work'&&(!e.task||e.auto)&&e.date>=tk){
+    if(t){t.name=e.title;t.diff=e.diff;t.sched={type:'once',days:[],every:2,start:tk,date:e.date};t.times=[];t.alarm=false;t.archived=null}
+    else{const n=fixTask({name:e.title,reps:1,sched:{type:'once',date:e.date},times:[],alarm:false,diff:e.diff});S.tasks.push(n);e.task=n.id;e.auto=true}
+  }else if(t){t.archived=tk;e.task=null;e.auto=false}
 }
 function toggleEvent(id){
   const e=S.events.find(x=>x.id===id);if(!e)return;
   if(e.task){if(e.date===todayKey())tick(e.task);else toast('Linked plans are checked off by completing the quest on the day');return}
   e.done=!e.done;mark('main');render();
 }
+
+/* ================= native alarms (APK only) ================= */
+const NL=()=>window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.LocalNotifications;
+let nsT=null,nsReady=false;
+function nid(str){let h=7;for(let i=0;i<str.length;i++)h=(h*31+str.charCodeAt(i))|0;return Math.abs(h)%2000000000+1}
+async function scheduleNative(){
+  const P=NL();if(!P)return;
+  try{
+    if(!nsReady){
+      const pr=await P.requestPermissions();if(pr.display!=='granted')return;
+      try{await P.createChannel({id:'questlog-alarm',name:'Quest alarms',description:'Rings for quests and plans',importance:5,visibility:1,sound:'alarm.wav',vibration:true,lights:true})}catch(e){}
+      try{await P.createChannel({id:'questlog-progress',name:'Daily progress',description:'Silent notification with your progress today',importance:2,visibility:1,vibration:false,lights:false})}catch(e){}
+      nsReady=true;
+    }
+    const pend=await P.getPending();
+    if(pend.notifications&&pend.notifications.length)await P.cancel({notifications:pend.notifications.map(n=>({id:n.id}))});
+    const now=new Date(),tk=todayKey(),list=[];
+    for(let d=0;d<7;d++){
+      const k=addDays(tk,d),base=pk(k);
+      const add=(key,m,title,body)=>{const at=new Date(base.getFullYear(),base.getMonth(),base.getDate(),Math.floor(m/60),m%60,0);if(at>now)list.push({id:nid(key),title:title,body:body,schedule:{at:at,allowWhileIdle:true},channelId:'questlog-alarm',sound:'alarm.wav'})};
+      for(const t of S.tasks){if(!t.alarm||!isDue(t,k))continue;sortedTimes(t).slice(0,t.reps).forEach((x,i)=>{if(d===0&&cnt(t,k)>i)return;add(k+'|q|'+t.id+'|'+i,toMin(x),t.name,'Quest time · '+x)})}
+      for(const e of S.events){if(e.date!==k||!e.remind||(d===0&&evDone(e)))continue;add(k+'|e|'+e.id,e.start,e.title,'Plan · '+fmtMin(e.start)+' – '+fmtMin(e.end))}
+    }
+    const mid=await postProgress(P,tk),all=list.slice(0,60);
+    if(mid)all.push(mid);
+    if(all.length)await P.schedule({notifications:all});
+  }catch(err){}
+}
+function progItem(k){
+  const st=dayStats(k),dn=Math.abs(Math.round(dayNum(k)));
+  return {id:1,title:st.due?'Today: '+st.done+' of '+st.due+' done · '+Math.round(st.pct||0)+'%':'No quests due today',body:SLOGANS[dn%SLOGANS.length],channelId:'questlog-progress',ongoing:true,autoCancel:false};
+}
+async function postProgress(P,tk){
+  try{await P.removeDeliveredNotifications({notifications:[{id:1}]})}catch(e){}
+  if(S.settings.progNotif===false)return null;
+  await P.schedule({notifications:[progItem(tk)]});
+  const t1=addDays(tk,1),b=pk(t1),it=progItem(t1);
+  it.schedule={at:new Date(b.getFullYear(),b.getMonth(),b.getDate(),0,0,10),allowWhileIdle:true};
+  return it;
+}
+function scheduleSoon(){if(!NL())return;clearTimeout(nsT);nsT=setTimeout(scheduleNative,1200)}
+function allQuestsHTML(){
+  const n=S.tasks.filter(t=>!t.archived).length;
+  return '<button class="btn" data-act="toggle-all" aria-expanded="'+!!ui.qAll+'" style="margin-top:6px">'+(ui.qAll?'Hide':'Show')+' all quests ('+n+')</button>'+(ui.qAll?questsHTML():'');
+}
+function todayHTML(){return todayHTML0()+(S.tasks.some(t=>!t.archived)?allQuestsHTML():'')}
 
 /* ================= events ================= */
 document.addEventListener('click',e=>{
@@ -1641,8 +1702,11 @@ document.addEventListener('click',e=>{
     case 'ev-cat':syncE();ed.cat=v;drawEvent();break;
     case 'ev-remind':syncE();ed.remind=!ed.remind;drawEvent();break;
     case 'ev-save':saveEvent();break;
-    case 'ev-del':if(armed==='ev'){S.events=S.events.filter(x=>x.id!==ed.id);mark('main');closeSheet();render();toast('Plan deleted')}else{armed='ev';el.textContent='Tap again to delete';el.classList.add('armed')}break;
+    case 'ev-del':if(armed==='ev'){const ev0=S.events.find(x=>x.id===ed.id);if(ev0&&ev0.auto){const t0=S.tasks.find(x=>x.id===ev0.task);if(t0)t0.archived=todayKey()}S.events=S.events.filter(x=>x.id!==ed.id);mark('main');closeSheet();render();toast('Plan deleted')}else{armed='ev';el.textContent='Tap again to delete';el.classList.add('armed')}break;
     case 'noop':break;
+    case 'tog-prog':S.settings.progNotif=S.settings.progNotif===false;mark('main');drawSettings();break;
+    case 'toggle-all':ui.qAll=!ui.qAll;render();break;
+    case 'ev-diff':syncE();ed.diff=v;drawEvent();break;
     case 'bg-remove':bgUrl=null;sstore.del('bg');applyBg();drawSettings();break;
     /* focus timer + tips */
     case 'pomo-start':pomoStart();break;
@@ -1704,7 +1768,7 @@ document.addEventListener('visibilitychange',()=>{
   await Promise.race([init,new Promise(r=>setTimeout(r,4000))]);
   applyLook();render();
   init.then(()=>{applyLook();render()});
-  loadSounds();
+  loadSounds();scheduleSoon();
   heartbeat();
   setInterval(heartbeat,15000);
   setInterval(pomoTick,500);
