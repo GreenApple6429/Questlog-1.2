@@ -145,7 +145,7 @@ main{padding-bottom:150px;display:grid;gap:14px}
 
 /* nav */
 nav{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--panel);border-top:var(--bw) solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);padding-left:max(4px,env(safe-area-inset-left,0px));padding-right:max(4px,env(safe-area-inset-right,0px))}
-nav .row{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr)}
+nav .row{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(6,1fr)}
 nav button{display:grid;justify-items:center;gap:2px;padding:9px 0 8px;color:var(--muted);font-size:11px;font-weight:700;position:relative}
 nav button[aria-current=page]{color:var(--acc)}
 :root[data-qt="day"] nav button[aria-current=page]{color:#9a6a00}
@@ -338,6 +338,11 @@ select{width:100%;min-height:48px;border-radius:var(--rb);border:var(--bw) solid
 :root[data-qf="bubbly"]{--font-display:'Fredoka',system-ui,sans-serif;--font-body:'Fredoka',system-ui,sans-serif}
 :root[data-qf="serif"]{--font-display:'Fraunces',Georgia,serif}
 :root[data-qf="scifi"]{--font-display:'Orbitron',system-ui,sans-serif}
+.gitem{display:flex;gap:10px;align-items:center;padding:10px;border-radius:var(--rb);background:var(--panel2);border:var(--bw) solid var(--line);cursor:pointer}
+.gitem.done .evt b{text-decoration:line-through;opacity:.6}
+.chipm{display:inline-block;padding:3px 9px;border-radius:99px;background:var(--panel2);font-size:12px;margin:2px;color:var(--muted)}
+.chipm.on{background:var(--acc);color:var(--acc-ink)}
+.sober-t{font-size:30px;font-weight:800;text-align:center}
 li[data-qid]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .tw2{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px -6px 0;padding:0 6px 6px}
 table.wk2{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}
@@ -465,6 +470,7 @@ const IC={
   camera:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
   reset:'<path d="M4 12a8 8 0 1 1 2.6 5.9M4 19v-4h4"/>'
 };
+IC.flag='<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>';IC.shield='<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/>';
 const ic=(n,s)=>'<svg class="ic" width="'+(s||20)+'" height="'+(s||20)+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+IC[n]+'</svg>';
 function flameSVG(skin,size,lit){
   if(!lit)return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.2c.7 3.6 5.6 5.7 5.6 11.2A5.6 5.6 0 0 1 6.4 13.4c0-2.2 1.1-3.7 2.5-4.9.2 1.8 1.1 2.7 2.1 3C10.6 8.9 10.4 5.5 12 2.2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" opacity=".7"/></svg>';
@@ -507,7 +513,10 @@ const defaults=()=>({
   wheel:{spent:0,bonusXp:0,medals:[],titles:[],flames:['classic'],history:[]},
   seen:{first2:false,celebrated:[]},
   hint:false,
-  events:[]
+  events:[],
+  goals:[],
+  sober:[],
+  quotes:[]
 });
 let S=defaults();
 let logs={};                  // 'YYYY-MM-DD' -> { taskId: [[minuteOfDay|null, xp], ...] }
@@ -538,6 +547,9 @@ function fixState(o){
   if(!Array.isArray(s.seen.celebrated))s.seen.celebrated=[];
   s.tasks=(Array.isArray(o.tasks)?o.tasks:[]).map(fixTask);
   s.events=(Array.isArray(o.events)?o.events:[]).filter(e=>e&&e.date&&e.title).map(e=>({id:e.id||newId(),date:e.date,start:+e.start||0,end:+e.end||(+e.start||0)+60,title:String(e.title),cat:ECAT[e.cat]?e.cat:'other',task:e.task||null,remind:e.remind!==false,done:!!e.done,auto:!!e.auto,diff:XP[e.diff]?e.diff:'medium'}));
+  s.goals=(Array.isArray(o.goals)?o.goals:[]).filter(g=>g&&g.title).map(g=>({id:g.id||newId(),title:String(g.title),term:TERMS[g.term]?g.term:'short',why:String(g.why||''),due:g.due||'',done:!!g.done}));
+  s.sober=(Array.isArray(o.sober)?o.sober:[]).filter(t=>t&&t.name&&t.start).map(t=>({id:t.id||newId(),name:String(t.name),start:+t.start,best:+t.best||0,resets:+t.resets||0}));
+  s.quotes=(Array.isArray(o.quotes)?o.quotes:[]).map(String).filter(Boolean);
   return s;
 }
 function starterTasks(){
@@ -664,7 +676,7 @@ let flushing=false, flushTimer=null;
 function persistLocal(){try{localStorage.setItem(LS,JSON.stringify({S:S,logs:logs}))}catch(e){}}
 const monthDoc=k=>'m-'+k.slice(0,7);
 function docBody(id){
-  if(id==='main')return {v:2,tasks:S.tasks,settings:S.settings,profile:S.profile,wheel:S.wheel,seen:S.seen,hint:S.hint,events:S.events};
+  if(id==='main')return {v:2,tasks:S.tasks,settings:S.settings,profile:S.profile,wheel:S.wheel,seen:S.seen,hint:S.hint,events:S.events,goals:S.goals,sober:S.sober,quotes:S.quotes};
   const days={};
   for(const k in logs)if(monthDoc(k)===id)days[k]=logs[k];
   return {days:days};
@@ -901,7 +913,7 @@ function showAlert(){
   root.innerHTML='<div class="alarm" role="alertdialog" aria-label="'+esc(a.kick)+'"><div class="card"><div class="bell">'+ic('bell',56)+'</div>'
     +'<div class="kick">'+esc(a.kick)+'</div><h2>'+esc(a.title)+'</h2><p class="muted">'+esc(a.text||'')+'</p>'
     +'<div class="acts">'+a.acts.map(x=>'<button class="btn'+(x.primary?' primary':'')+'" data-act="'+x.act+'">'+esc(x.label)+'</button>').join('')+'</div></div></div>';
-  if(a.loop)startAlarmSound();else playSlot(a.sound||'timer');
+  if(a.loop){if(!NL()||customBlobs.alarm)startAlarmSound()}else playSlot(a.sound||'timer');
   try{navigator.vibrate&&navigator.vibrate([250,120,250,120,250])}catch(e){}
 }
 function nextAlert(){alertQ.shift();showAlert()}
@@ -985,7 +997,7 @@ function pomoTick(){
 }
 
 /* ================= views ================= */
-const TABS=[['today','Today','today'],['plan','Plan','clock'],['calendar','Calendar','calendar'],['stats','Stats','chart'],['tips','Tips','bulb']];
+const TABS=[['today','Today','today'],['plan','Plan','clock'],['calendar','Calendar','calendar'],['stats','Stats','chart'],['goals','Goals','flag'],['tips','Tips','bulb']];
 function renderHero(){
   const xp=totalXp(),li=levelInfo(xp),st=streakInfo(),tok=tokensAvail(),av=S.profile.avatar;
   const skin=S.profile.flame||'classic';
@@ -1006,7 +1018,7 @@ function renderNav(){
 function render(){
   renderHero();renderNav();
   const v=$('#view');
-  const f={today:todayHTML,plan:planHTML,calendar:calendarHTML,stats:statsHTML,quests:questsHTML,tips:tipsHTML}[ui.tab];
+  const f={today:todayHTML,plan:planHTML,goals:goalsHTML,calendar:calendarHTML,stats:statsHTML,quests:questsHTML,tips:tipsHTML}[ui.tab];
   v.innerHTML=f();
   $('#fab').hidden=!(ui.tab==='today'||ui.tab==='quests');
   $('#fab').innerHTML=ic('plus',28);
@@ -1331,6 +1343,7 @@ function drawSettings(){
     '<div class="switchrow"><div><b>Keep screen on</b><small>Stops the screen from sleeping while Questlog is open, so alarms can ring.</small></div><button class="sw" role="switch" aria-checked="'+st.awake+'" aria-label="Keep screen on" data-act="set-awake"></button></div>'
     +(NL()?'<div class="switchrow"><div><b>Progress notification</b><small>A silent notification with today\'s percentage and a motivational quote.</small></div><button class="sw" role="switch" aria-checked="'+(S.settings.progNotif!==false)+'" aria-label="Progress notification" data-act="tog-prog"></button></div>':'')
     +(window.nativeErr?'<p class="hint">Notification error: '+esc(window.nativeErr)+'</p>':'')
+    +(NL()?'<div class="fld"><span>Reliable alarms</span><p class="hint">'+(window.nativeExact===false?'Exact alarms are NOT allowed, so alarms can be late or missing. ':'Exact alarms are allowed. ')+'Also set Phone settings, Apps, Questlog, Battery to Unrestricted.</p>'+(window.nativeExact===false?'<button class="btn sm" data-act="exact-alarms" style="justify-self:start">Allow exact alarms</button>':'')+'</div>':'')
     +'<div class="fld"><p class="hint">This web version can only ring while Questlog is open. Alarms that ring on standby and a pinned progress notification need the Android app.</p><button class="btn sm" data-act="test-alarm" style="justify-self:start">'+ic('bell',16)+' Test alarm</button></div>';
   const nextWeek=addDays(weekStart(tk),7),dNow=tokenDaysFor(weekStart(tk)),dNext=tokenDaysFor(nextWeek);
   const streaks=
@@ -1397,7 +1410,7 @@ function doReset(){
   const fresh=defaults();
   fresh.hint=true;
   if(keep){
-    fresh.tasks=S.tasks.filter(t=>!t.archived);fresh.events=S.events;
+    fresh.tasks=S.tasks.filter(t=>!t.archived);fresh.events=S.events;fresh.goals=S.goals;fresh.sober=S.sober;fresh.quotes=S.quotes;
     fresh.settings=Object.assign({},fresh.settings,S.settings,{tokenRules:fresh.settings.tokenRules});
     fresh.profile=Object.assign({},fresh.profile,{name:S.profile.name,avatar:S.profile.avatar});
   }
@@ -1586,6 +1599,7 @@ async function scheduleNative(){
       try{await P.createChannel({id:'questlog-alarm3',name:'Quest alarms (own ringtone)',description:'Silent notification, the app plays your own ringtone',importance:2,visibility:1,vibration:false})}catch(e){}
       nsReady=true;
     }
+    try{const ex=await P.checkExactNotificationSetting();window.nativeExact=ex.exact_alarm!=='denied'}catch(e){}
     const pend=await P.getPending();
     if(pend.notifications&&pend.notifications.length)await P.cancel({notifications:pend.notifications.map(n=>({id:n.id}))});
     const now=new Date(),tk=todayKey(),list=[];
@@ -1636,6 +1650,85 @@ function todayHTML(){return todayHTML0()}
   document.addEventListener('contextmenu',e=>{if(e.target.closest&&e.target.closest('li[data-qid]'))e.preventDefault()});
 })();
 
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)scheduleSoon()});
+/* ================= goals + sober timers ================= */
+const TERMS={short:['Short term','Weeks'],mid:['Mid term','Months'],long:['Long term','Years']};
+const MILES=[1,2,3,5,7,10,14,21,30,45,60,90,120,180,270,365,500,730,1000];
+const SQ=['One day at a time.','You are stronger than this urge.','Every clean day is a vote for who you want to be.','Urges pass. Your progress stays.','Discipline is choosing what you want most over what you want now.','Do not break the chain.','Future you is already proud.','The pain of discipline is smaller than the pain of regret.'];
+const fmtSince=ms=>{const s=Math.floor(Math.max(0,ms)/1000);return Math.floor(s/86400)+'d '+pad(Math.floor(s%86400/3600))+'h '+pad(Math.floor(s%3600/60))+'m '+pad(s%60)+'s'};
+setInterval(()=>{if(ui.tab!=='goals'||ui.gview!=='sober')return;document.querySelectorAll('[data-since]').forEach(el=>{el.textContent=fmtSince(Date.now()-(+el.dataset.since))})},1000);
+const sheetHTML=(title,body,foot)=>'<div class="scrim" data-act="close-sheet"></div><section class="sheet" role="dialog" aria-label="'+title+'"><div class="sheet-head"><h2>'+title+'</h2><button class="icon-btn" data-act="close-sheet" aria-label="Close">'+ic('close',22)+'</button></div><div class="sheet-body">'+body+'</div>'+(foot?'<div class="sheet-foot">'+foot+'</div>':'')+'</section>';
+function goalsHTML0(){
+  const tk=todayKey();let h='<p class="hint" style="padding:0 4px">Know what you are fighting for. Tap a goal to edit it.</p>';
+  for(const k of Object.keys(TERMS)){
+    const gs=S.goals.filter(g=>g.term===k),dn=gs.filter(g=>g.done).length;
+    h+='<section class="card panel" style="display:grid;gap:8px"><div style="display:flex;justify-content:space-between;align-items:center"><b>'+TERMS[k][0]+' <span class="hint">· '+TERMS[k][1]+(gs.length?' · '+dn+'/'+gs.length:'')+'</span></b><button class="btn sm" data-act="g-add" data-v="'+k+'">'+ic('plus',16)+' Add</button></div>'
+    +(gs.length?gs.map(g=>{const left=g.due?Math.round(dayNum(g.due)-dayNum(tk)):0;return '<div class="gitem'+(g.done?' done':'')+'" data-act="g-edit" data-id="'+g.id+'"><button class="evc'+(g.done?' on':'')+'" style="--c:var(--acc)" data-act="g-done" data-id="'+g.id+'" aria-label="Toggle done">'+(g.done?ic('check',16):'')+'</button><div class="evt"><b>'+esc(g.title)+'</b>'+(g.why?'<span>'+esc(g.why)+'</span>':'')+(g.due?'<span class="tnum">'+fmtDate(g.due)+(g.done?'':left>=0?' · '+left+' days left':' · overdue')+'</span>':'')+'</div></div>'}).join(''):'<p class="hint" style="margin:0">Nothing here yet.</p>')+'</section>';
+  }
+  return h;
+}
+let gd=null;
+function openGoal(id,term){const g=id&&S.goals.find(x=>x.id===id);gd=g?clone(g):{id:null,title:'',term:term||'short',why:'',due:'',done:false};armed=null;sheet='goal';drawGoal()}
+function syncG(){const t=$('#g-title');if(!t||!gd)return;gd.title=t.value;gd.why=$('#g-why').value;gd.due=$('#g-due').value}
+function drawGoal(){
+  const d=gd;
+  $('#sheet-root').innerHTML=sheetHTML(d.id?'Edit goal':'New goal',
+    '<div class="fld"><label class="lab" for="g-title">Goal</label><input type="text" id="g-title" maxlength="80" value="'+esc(d.title)+'" autocomplete="off"><p class="err" id="g-err" hidden></p></div>'
+    +'<div class="fld"><span>Timeframe</span><div class="seg fill">'+Object.keys(TERMS).map(k=>'<button data-act="g-term" data-v="'+k+'" aria-pressed="'+(d.term===k)+'">'+TERMS[k][0]+'</button>').join('')+'</div></div>'
+    +'<div class="fld"><label class="lab" for="g-why">Why does it matter?</label><input type="text" id="g-why" maxlength="120" value="'+esc(d.why)+'" autocomplete="off"></div>'
+    +'<div class="fld"><label class="lab" for="g-due">Target date (optional)</label><input type="date" id="g-due" value="'+esc(d.due)+'"></div>',
+    (d.id?'<button class="btn danger" data-act="g-del">Delete</button>':'')+'<button class="btn primary" data-act="g-save">Save goal</button>');
+  document.documentElement.style.overflow='hidden';
+}
+function saveGoal(){
+  syncG();
+  if(!gd.title.trim()){const e=$('#g-err');e.textContent='Give it a name.';e.hidden=false;return}
+  const g={id:gd.id||newId(),title:gd.title.trim(),term:gd.term,why:gd.why.trim(),due:gd.due||'',done:!!gd.done},i=S.goals.findIndex(x=>x.id===g.id);
+  if(i>=0)S.goals[i]=g;else S.goals.push(g);
+  mark('main');closeSheet();render();
+}
+function soberHTML(){
+  const all=SQ.concat(S.quotes),qi=(Math.abs(Math.round(dayNum(todayKey())))+(ui.qi||0))%all.length,now=Date.now();
+  let h='<section class="card panel"><p class="disp" style="font-size:17px;text-align:center;margin:4px 0 10px">“'+esc(all[qi])+'”</p><div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn sm" data-act="so-quote">Another quote</button><button class="btn sm" data-act="so-quotes">My quotes</button></div></section>'
+    +'<button class="btn primary" data-act="so-add">'+ic('plus',18)+' Start a timer</button>';
+  if(!S.sober.length)h+='<p class="hint" style="padding:0 4px">Start a timer for something you are quitting. It counts up until you reset it.</p>';
+  for(const t of S.sober){
+    const ms=now-t.start,d=ms/864e5,nx=MILES.find(m=>m>d),rd=MILES.filter(m=>m<=d);
+    h+='<section class="card panel" style="display:grid;gap:8px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b data-act="so-edit" data-id="'+t.id+'" style="cursor:pointer">'+esc(t.name)+'</b><span class="hint">'+(t.resets?t.resets+' reset'+(t.resets>1?'s':'')+' · ':'')+'best '+Math.floor(Math.max(t.best||0,ms)/864e5)+'d</span></div>'
+    +'<div class="disp tnum sober-t" data-since="'+t.start+'">'+fmtSince(ms)+'</div>'
+    +'<p class="hint" style="margin:0">'+(nx?'Next milestone: '+nx+' day'+(nx>1?'s':'')+' · '+Math.ceil(nx-d)+' to go':'Every milestone reached. Incredible.')+'</p>'
+    +'<div>'+rd.map(m=>'<span class="chipm on">'+m+'d</span>').join('')+MILES.filter(m=>m>d).slice(0,3).map(m=>'<span class="chipm">'+m+'d</span>').join('')+'</div>'
+    +'<button class="btn sm" data-act="so-reset" data-id="'+t.id+'" style="justify-self:start">I slipped, reset</button></section>';
+  }
+  return h;
+}
+function drawSober(id){
+  const t=id&&S.sober.find(x=>x.id===id),d=new Date(t?t.start:Date.now()),v=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  sheet='sober';ui.sid=id||null;armed=null;
+  $('#sheet-root').innerHTML=sheetHTML(t?'Edit timer':'New timer',
+    '<div class="fld"><label class="lab" for="so-name">What are you quitting?</label><input type="text" id="so-name" maxlength="40" value="'+esc(t?t.name:'')+'" autocomplete="off"><p class="err" id="so-err" hidden></p></div>'
+    +'<div class="fld"><label class="lab" for="so-start">Started</label><input type="datetime-local" id="so-start" value="'+v+'"></div>',
+    (t?'<button class="btn danger" data-act="so-del">Delete</button>':'')+'<button class="btn primary" data-act="so-save">Save</button>');
+  document.documentElement.style.overflow='hidden';
+}
+function saveSober(){
+  const n=$('#so-name').value.trim(),st=new Date($('#so-start').value).getTime();
+  if(!n){const e=$('#so-err');e.textContent='Give it a name.';e.hidden=false;return}
+  const start=isNaN(st)?Date.now():Math.min(st,Date.now()),t=ui.sid&&S.sober.find(x=>x.id===ui.sid);
+  if(t){t.name=n;t.start=start}else S.sober.push({id:newId(),name:n,start:start,best:0,resets:0});
+  mark('main');closeSheet();render();
+}
+function drawQuotes(){
+  sheet='quotes';
+  $('#sheet-root').innerHTML=sheetHTML('My quotes','<div class="fld"><label class="lab" for="q-text">Add your own quote</label><input type="text" id="q-text" maxlength="140" autocomplete="off"></div><button class="btn primary" data-act="q-add">Add quote</button>'
+    +(S.quotes.length?'<ul style="list-style:none;padding:0;display:grid;gap:8px;margin-top:12px">'+S.quotes.map((q,i)=>'<li class="gitem"><span style="flex:1">'+esc(q)+'</span><button class="icon-btn" data-act="q-del" data-i="'+i+'" aria-label="Delete quote">'+ic('close',18)+'</button></li>').join('')+'</ul>':'<p class="hint">No custom quotes yet. They are mixed in with the built-in ones.</p>'),'');
+  document.documentElement.style.overflow='hidden';
+}
+
+function goalsHTML(){
+  const v=ui.gview==='sober'?'sober':'goals';
+  return '<div class="seg fill" style="margin-bottom:4px"><button data-act="gv" data-v="goals" aria-pressed="'+(v==='goals')+'">Goals</button><button data-act="gv" data-v="sober" aria-pressed="'+(v==='sober')+'">Sober</button></div>'+(v==='sober'?soberHTML():goalsHTML0());
+}
 /* ================= events ================= */
 document.addEventListener('click',e=>{
   const el=e.target.closest('[data-act]');if(!el)return;
@@ -1681,7 +1774,7 @@ document.addEventListener('click',e=>{
     case 'alarm-snooze':{const a0=alertQ[0];if(a0&&a0.data)snoozed.push({id:a0.data.id,time:a0.data.time,slot:a0.data.slot,until:Date.now()+10*60000});nextAlert();toast('Snoozed for 10 minutes');break}
     case 'alert-ok':nextAlert();break;
     case 'timer-next':nextAlert();pomoStart();break;
-    case 'test-alarm':pushAlert({kick:'Test alarm',title:'Test alarm',text:'This is how an alarm looks while Questlog is open.',loop:true,acts:[{label:'Close',act:'alert-ok',primary:1}]});break;
+    case 'test-alarm':if(NL()&&!customBlobs.alarm){NL().schedule({notifications:[{id:999,title:'Test alarm',body:'This is how an alarm rings.',channelId:'questlog-alarm2',sound:'alarm.wav',schedule:{at:new Date(Date.now()+5000),allowWhileIdle:true}}]}).catch(e=>{window.nativeErr=String((e&&e.message)||e)});toast('Test alarm in 5 seconds. Lock your phone to try it.');break}pushAlert({kick:'Test alarm',title:'Test alarm',text:'This is how an alarm looks while Questlog is open.',loop:true,acts:[{label:'Close',act:'alert-ok',primary:1}]});break;
     case 'set-look':{
       const k=el.dataset.k;S.settings[k]=k==='size'?+v:v;mark('main');applyLook();drawSettings();render();break}
     case 'set-sound':S.settings.sound=!S.settings.sound;mark('main');drawSettings();if(S.settings.sound){unlockAudio();playSlot('check')}break;
@@ -1728,6 +1821,23 @@ document.addEventListener('click',e=>{
     case 'ev-save':saveEvent();break;
     case 'ev-del':if(armed==='ev'){const ev0=S.events.find(x=>x.id===ed.id);if(ev0&&ev0.auto){const t0=S.tasks.find(x=>x.id===ev0.task);if(t0)t0.archived=todayKey()}S.events=S.events.filter(x=>x.id!==ed.id);mark('main');closeSheet();render();toast('Plan deleted')}else{armed='ev';el.textContent='Tap again to delete';el.classList.add('armed')}break;
     case 'noop':break;
+    case 'gv':ui.gview=v;render();break;
+    case 'g-add':openGoal(null,v);break;
+    case 'g-edit':openGoal(id);break;
+    case 'g-done':{const g=S.goals.find(x=>x.id===id);if(g){g.done=!g.done;mark('main');render()}break}
+    case 'g-term':syncG();gd.term=v;drawGoal();break;
+    case 'g-save':saveGoal();break;
+    case 'g-del':if(armed==='g'){S.goals=S.goals.filter(x=>x.id!==gd.id);mark('main');closeSheet();render()}else{armed='g';el.textContent='Tap again to delete';el.classList.add('armed')}break;
+    case 'so-add':drawSober();break;
+    case 'so-edit':drawSober(id);break;
+    case 'so-save':saveSober();break;
+    case 'so-del':if(armed==='sd'){S.sober=S.sober.filter(x=>x.id!==ui.sid);mark('main');closeSheet();render()}else{armed='sd';el.textContent='Tap again to delete';el.classList.add('armed')}break;
+    case 'so-reset':if(armed==='sr'+id){const t=S.sober.find(x=>x.id===id);if(t){t.best=Math.max(t.best||0,Date.now()-t.start);t.resets=(t.resets||0)+1;t.start=Date.now();mark('main');armed=null;render();toast('Fresh start. Your best stays saved.')}}else{armed='sr'+id;el.textContent='Tap again to reset';el.classList.add('armed')}break;
+    case 'so-quote':ui.qi=(ui.qi||0)+1;render();break;
+    case 'so-quotes':drawQuotes();break;
+    case 'q-add':{const x=$('#q-text').value.trim();if(x){S.quotes.push(x);mark('main');drawQuotes();render()}break}
+    case 'q-del':S.quotes.splice(+el.dataset.i,1);mark('main');drawQuotes();render();break;
+    case 'exact-alarms':NL().changeExactNotificationSetting().then(()=>scheduleSoon()).catch(()=>{});break;
     case 'tog-prog':S.settings.progNotif=S.settings.progNotif===false;mark('main');drawSettings();break;
     case 'toggle-all':ui.qAll=!ui.qAll;render();break;
     case 'ev-diff':syncE();ed.diff=v;drawEvent();break;
