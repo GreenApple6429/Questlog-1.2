@@ -343,7 +343,7 @@ select{width:100%;min-height:48px;border-radius:var(--rb);border:var(--bw) solid
 .chipm{display:inline-block;padding:3px 9px;border-radius:99px;background:var(--panel2);font-size:12px;margin:2px;color:var(--muted)}
 .chipm.on{background:var(--acc);color:var(--acc-ink)}
 .sober-t{font-size:30px;font-weight:800;text-align:center}
-li[data-qid]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+li[data-qid],[data-sid]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .tw2{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:8px -6px 0;padding:0 6px 6px}
 table.wk2{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%}
 .wk2 th,.wk2 td{padding:6px 5px;text-align:center;white-space:nowrap;font-weight:600}
@@ -1639,15 +1639,15 @@ function todayHTML(){return todayHTML0()}
   const clr=()=>{clearTimeout(tm);tm=null};
   document.addEventListener('pointerdown',e=>{
     fired=false;clr();
-    const li=e.target.closest&&e.target.closest('li[data-qid]');
+    const li=e.target.closest&&e.target.closest('li[data-qid],[data-sid]');
     if(!li||e.target.closest('button'))return;
     sx=e.clientX;sy=e.clientY;
-    tm=setTimeout(()=>{tm=null;fired=true;try{navigator.vibrate&&navigator.vibrate(30)}catch(x){}openEditor(li.dataset.qid)},550);
+    tm=setTimeout(()=>{tm=null;fired=true;try{navigator.vibrate&&navigator.vibrate(30)}catch(x){}li.dataset.sid?drawSober(li.dataset.sid):openEditor(li.dataset.qid)},550);
   });
   document.addEventListener('pointermove',e=>{if(tm&&(Math.abs(e.clientX-sx)>10||Math.abs(e.clientY-sy)>10))clr()});
   ['pointerup','pointercancel'].forEach(t=>document.addEventListener(t,clr));
   document.addEventListener('click',e=>{if(fired){fired=false;e.stopPropagation();e.preventDefault()}},true);
-  document.addEventListener('contextmenu',e=>{if(e.target.closest&&e.target.closest('li[data-qid]'))e.preventDefault()});
+  document.addEventListener('contextmenu',e=>{if(e.target.closest&&e.target.closest('li[data-qid],[data-sid]'))e.preventDefault()});
 })();
 
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)scheduleSoon()});
@@ -1691,10 +1691,10 @@ function soberHTML(){
   const all=SQ.concat(S.quotes),qi=(Math.abs(Math.round(dayNum(todayKey())))+(ui.qi||0))%all.length,now=Date.now();
   let h='<section class="card panel"><p class="disp" style="font-size:17px;text-align:center;margin:4px 0 10px">“'+esc(all[qi])+'”</p><div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><button class="btn sm" data-act="so-quote">Another quote</button><button class="btn sm" data-act="so-quotes">My quotes</button></div></section>'
     +'<button class="btn primary" data-act="so-add">'+ic('plus',18)+' Start a timer</button>';
-  if(!S.sober.length)h+='<p class="hint" style="padding:0 4px">Start a timer for something you are quitting. It counts up until you reset it.</p>';
+  if(!S.sober.length)h+='<p class="hint" style="padding:0 4px">Start a timer for something you are quitting. It counts up until you reset it.</p>';else h+='<p class="hint" style="padding:0 4px">Hold a timer to edit or delete it.</p>';
   for(const t of S.sober){
     const ms=now-t.start,d=ms/864e5,nx=MILES.find(m=>m>d),rd=MILES.filter(m=>m<=d);
-    h+='<section class="card panel" style="display:grid;gap:8px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b data-act="so-edit" data-id="'+t.id+'" style="cursor:pointer">'+esc(t.name)+'</b><span class="hint">'+(t.resets?t.resets+' reset'+(t.resets>1?'s':'')+' · ':'')+'best '+Math.floor(Math.max(t.best||0,ms)/864e5)+'d</span></div>'
+    h+='<section class="card panel" data-sid="'+t.id+'" style="display:grid;gap:8px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>'+esc(t.name)+'</b><span class="hint">'+(t.resets?t.resets+' reset'+(t.resets>1?'s':'')+' · ':'')+'best '+Math.floor(Math.max(t.best||0,ms)/864e5)+'d</span></div>'
     +'<div class="disp tnum sober-t" data-since="'+t.start+'">'+fmtSince(ms)+'</div>'
     +'<p class="hint" style="margin:0">'+(nx?'Next milestone: '+nx+' day'+(nx>1?'s':'')+' · '+Math.ceil(nx-d)+' to go':'Every milestone reached. Incredible.')+'</p>'
     +'<div>'+rd.map(m=>'<span class="chipm on">'+m+'d</span>').join('')+MILES.filter(m=>m>d).slice(0,3).map(m=>'<span class="chipm">'+m+'d</span>').join('')+'</div>'
